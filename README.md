@@ -22,7 +22,7 @@ import (
 )
 
 func main() {
-    client := sdk.NewClient("https://your-api-endpoint.com", "your-api-key")
+    client := sdk.NewClient("http://hackersera-ai.cloudjiffy.net", "your-api-key")
 
     resp, err := client.ChatCompletion(context.Background(), sdk.ChatRequest{
         Model:    sdk.ModelDefault,
@@ -171,7 +171,7 @@ HackersEra AI works as a custom provider in [OpenCode](https://opencode.ai). Add
       "npm": "@ai-sdk/openai-compatible",
       "name": "HackersEra AI",
       "options": {
-        "baseURL": "https://your-api-endpoint.com/v1",
+        "baseURL": "http://hackersera-ai.cloudjiffy.net/v1",
         "apiKey": "{env:HACKERSERA_API_KEY}"
       },
       "models": {
@@ -219,7 +219,7 @@ HackersEra AI is fully OpenAI-compatible. Use it with any client that supports c
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://your-api-endpoint.com/v1",
+    base_url="http://hackersera-ai.cloudjiffy.net/v1",
     api_key="your-api-key",
 )
 
@@ -232,7 +232,7 @@ print(response.choices[0].message.content)
 
 **curl**
 ```bash
-curl https://your-api-endpoint.com/v1/chat/completions \
+curl http://hackersera-ai.cloudjiffy.net/v1/chat/completions \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -240,6 +240,26 @@ curl https://your-api-endpoint.com/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+## Testing the Deployment
+
+A test script is provided to verify the API deployment:
+
+```bash
+# Set your API key
+export HACKERSERA_API_KEY=your-api-key
+
+# Run the test
+cd test
+go run test_deployment.go
+```
+
+The test will verify:
+- Health endpoint
+- Model listing and retrieval
+- Chat completions (non-streaming)
+- Streaming responses
+- Embeddings
 
 ## License
 
