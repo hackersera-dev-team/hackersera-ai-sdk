@@ -1,6 +1,6 @@
-# hackersera-ai-model-sdk
+# HackersEra AI SDK
 
-Go SDK for the [hackersera-ai-model-provider](https://hub.docker.com/r/hackerseravsoc/hackersera-ai-model-provider) API.
+Go SDK for the [HackersEra AI](https://hub.docker.com/r/hackerseravsoc/hackersera-ai-model-provider) API.
 
 ## Install
 
@@ -22,10 +22,10 @@ import (
 )
 
 func main() {
-    client := sdk.NewClient("http://localhost:8080", "your-api-key")
+    client := sdk.NewClient("https://your-api-endpoint.com", "your-api-key")
 
     resp, err := client.ChatCompletion(context.Background(), sdk.ChatRequest{
-        Model:    "sonnet",
+        Model:    sdk.ModelDefault,
         Messages: []sdk.Message{{Role: "user", Content: "Hello!"}},
     })
     if err != nil {
@@ -38,13 +38,12 @@ func main() {
 
 ## Available Models
 
-| Model ID | Backend | Use Case |
+| Model | Constant | Use Case |
 |---|---|---|
-| `sonnet` | GLM-4.7 | General purpose (default) |
-| `opus` | GLM-4.7 | Complex reasoning |
-| `haiku` | GLM-4.5-Air | Fast, lightweight tasks |
-| `gpt-4` / `gpt-4o` | GLM-4.7 | OpenAI-compatible alias |
-| `gpt-4o-mini` / `gpt-3.5-turbo` | GLM-4.5-Air | OpenAI-compatible alias |
+| `hackersera-ai` | `sdk.ModelDefault` | General purpose (default) |
+| `hackersera-ai-pro` | `sdk.ModelPro` | Complex reasoning |
+| `hackersera-ai-lite` | `sdk.ModelLite` | Fast, lightweight tasks |
+| `hackersera-ai-embedding` | `sdk.ModelEmbedding` | Text embeddings |
 
 ## API Reference
 
@@ -63,7 +62,7 @@ client = sdk.NewClient(baseURL, apiKey).WithHTTPClient(&http.Client{
 
 ```go
 resp, err := client.ChatCompletion(ctx, sdk.ChatRequest{
-    Model: "sonnet",
+    Model: sdk.ModelDefault,
     Messages: []sdk.Message{
         {Role: "system", Content: "You are a helpful assistant."},
         {Role: "user", Content: "Explain Go interfaces"},
@@ -78,7 +77,7 @@ fmt.Printf("Tokens: %d\n", resp.Usage.TotalTokens)
 
 ```go
 chunks, errs := client.ChatCompletionStream(ctx, sdk.ChatRequest{
-    Model:    "sonnet",
+    Model:    sdk.ModelDefault,
     Messages: []sdk.Message{{Role: "user", Content: "Write a poem"}},
 })
 
@@ -110,7 +109,7 @@ for _, m := range models.Data {
 ### Get Model
 
 ```go
-model, err := client.GetModel(ctx, "sonnet")
+model, err := client.GetModel(ctx, sdk.ModelDefault)
 ```
 
 ### Embeddings
@@ -118,7 +117,7 @@ model, err := client.GetModel(ctx, "sonnet")
 ```go
 emb, err := client.CreateEmbedding(ctx, sdk.EmbeddingRequest{
     Input: "Hello world",
-    Model: "text-embedding-ada-002",
+    Model: sdk.ModelEmbedding,
 })
 ```
 
@@ -126,7 +125,7 @@ emb, err := client.CreateEmbedding(ctx, sdk.EmbeddingRequest{
 
 ```go
 health, err := client.Health(ctx)
-fmt.Printf("Status: %s\n", health.Status)
+fmt.Printf("Status: %s, Version: %s\n", health.Status, health.Version)
 ```
 
 ### Error Handling
@@ -142,15 +141,6 @@ if err != nil {
         )
     }
 }
-```
-
-## Running the Provider
-
-```bash
-docker run -p 8080:8080 \
-  -e ANTHROPIC_AUTH_TOKEN="your-zai-api-key" \
-  -e API_KEY="your-proxy-api-key" \
-  hackerseravsoc/hackersera-ai-model-provider
 ```
 
 ## License

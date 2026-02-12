@@ -1,5 +1,18 @@
 package hackeserasdk
 
+// ─── Model Constants ────────────────────────────────────────────────────────
+
+const (
+	// ModelDefault is the default general-purpose model.
+	ModelDefault = "hackersera-ai"
+	// ModelPro is the advanced model for complex reasoning.
+	ModelPro = "hackersera-ai-pro"
+	// ModelLite is the fast, lightweight model.
+	ModelLite = "hackersera-ai-lite"
+	// ModelEmbedding is the model for text embeddings.
+	ModelEmbedding = "hackersera-ai-embedding"
+)
+
 // ─── Chat Completions ───────────────────────────────────────────────────────
 
 // ChatRequest represents a chat completion request.
@@ -17,13 +30,12 @@ type Message struct {
 
 // ChatResponse represents a non-streaming chat completion response.
 type ChatResponse struct {
-	ID                string   `json:"id"`
-	Object            string   `json:"object"`
-	Created           int64    `json:"created"`
-	Model             string   `json:"model"`
-	Choices           []Choice `json:"choices"`
-	Usage             Usage    `json:"usage"`
-	SystemFingerprint string   `json:"system_fingerprint,omitempty"`
+	ID      string   `json:"id"`
+	Object  string   `json:"object"`
+	Created int64    `json:"created"`
+	Model   string   `json:"model"`
+	Choices []Choice `json:"choices"`
+	Usage   Usage    `json:"usage"`
 }
 
 // Choice represents a single completion choice.
@@ -114,9 +126,8 @@ type EmbeddingUsage struct {
 
 // HealthResponse represents the response from the health endpoint.
 type HealthResponse struct {
-	Status    string `json:"status"`
-	ClaudeCLI string `json:"claude_cli"`
-	Version   string `json:"version"`
+	Status  string `json:"status"`
+	Version string `json:"version"`
 }
 
 // ─── Errors ─────────────────────────────────────────────────────────────────

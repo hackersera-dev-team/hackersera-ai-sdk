@@ -25,7 +25,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Health check failed: %v", err)
 	}
-	fmt.Printf("Status: %s, CLI: %s\n\n", health.Status, health.ClaudeCLI)
+	fmt.Printf("Status: %s, Version: %s\n\n", health.Status, health.Version)
 
 	// ─── List Models ─────────────────────────────────────────────────────
 	fmt.Println("=== Available Models ===")
@@ -41,7 +41,7 @@ func main() {
 	// ─── Chat Completion ─────────────────────────────────────────────────
 	fmt.Println("=== Chat Completion ===")
 	resp, err := client.ChatCompletion(ctx, sdk.ChatRequest{
-		Model: "sonnet",
+		Model: sdk.ModelDefault,
 		Messages: []sdk.Message{
 			{Role: "system", Content: "You are a helpful assistant. Be concise."},
 			{Role: "user", Content: "What is Go programming language?"},
@@ -58,7 +58,7 @@ func main() {
 	// ─── Streaming ───────────────────────────────────────────────────────
 	fmt.Println("=== Streaming Chat ===")
 	chunks, errs := client.ChatCompletionStream(ctx, sdk.ChatRequest{
-		Model: "sonnet",
+		Model: sdk.ModelDefault,
 		Messages: []sdk.Message{
 			{Role: "user", Content: "Write a haiku about coding"},
 		},
