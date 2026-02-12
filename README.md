@@ -73,6 +73,20 @@ fmt.Println(resp.Choices[0].Message.Content)
 fmt.Printf("Tokens: %d\n", resp.Usage.TotalTokens)
 ```
 
+With optional parameters:
+
+```go
+resp, err := client.ChatCompletion(ctx, sdk.ChatRequest{
+    Model: sdk.ModelPro,
+    Messages: []sdk.Message{
+        {Role: "user", Content: "Write a creative story"},
+    },
+    MaxTokens:   sdk.IntPtr(2000),
+    Temperature: sdk.Float64Ptr(0.9),
+    TopP:        sdk.Float64Ptr(0.95),
+})
+```
+
 ### Streaming
 
 ```go

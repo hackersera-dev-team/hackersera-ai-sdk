@@ -17,10 +17,21 @@ const (
 
 // ChatRequest represents a chat completion request.
 type ChatRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Stream   bool      `json:"stream,omitempty"`
+	Model               string    `json:"model"`
+	Messages            []Message `json:"messages"`
+	Stream              bool      `json:"stream,omitempty"`
+	MaxTokens           *int      `json:"max_tokens,omitempty"`
+	MaxCompletionTokens *int      `json:"max_completion_tokens,omitempty"`
+	Temperature         *float64  `json:"temperature,omitempty"`
+	TopP                *float64  `json:"top_p,omitempty"`
+	Stop                []string  `json:"stop,omitempty"`
 }
+
+// IntPtr is a helper to create a pointer to an int value.
+func IntPtr(v int) *int { return &v }
+
+// Float64Ptr is a helper to create a pointer to a float64 value.
+func Float64Ptr(v float64) *float64 { return &v }
 
 // Message represents a single message in a conversation.
 type Message struct {
