@@ -143,6 +143,90 @@ if err != nil {
 }
 ```
 
+## Integrations
+
+### OpenCode
+
+HackersEra AI works as a custom provider in [OpenCode](https://opencode.ai). Add this to your `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "hackersera": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "HackersEra AI",
+      "options": {
+        "baseURL": "https://your-api-endpoint.com/v1",
+        "apiKey": "{env:HACKERSERA_API_KEY}"
+      },
+      "models": {
+        "hackersera-ai": {
+          "name": "HackersEra AI",
+          "limit": {
+            "context": 200000,
+            "output": 8192
+          }
+        },
+        "hackersera-ai-pro": {
+          "name": "HackersEra AI Pro",
+          "limit": {
+            "context": 200000,
+            "output": 8192
+          }
+        },
+        "hackersera-ai-lite": {
+          "name": "HackersEra AI Lite",
+          "limit": {
+            "context": 200000,
+            "output": 8192
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Set your API key:
+
+```bash
+export HACKERSERA_API_KEY=your-api-key
+```
+
+Or use the `/connect` command in OpenCode, select **Other**, enter `hackersera` as the provider ID, and paste your API key. Then run `/models` to see HackersEra AI models in the selection list.
+
+### Any OpenAI-Compatible Client
+
+HackersEra AI is fully OpenAI-compatible. Use it with any client that supports custom OpenAI endpoints:
+
+**Python (openai)**
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://your-api-endpoint.com/v1",
+    api_key="your-api-key",
+)
+
+response = client.chat.completions.create(
+    model="hackersera-ai",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
+```
+
+**curl**
+```bash
+curl https://your-api-endpoint.com/v1/chat/completions \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "hackersera-ai",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
 ## License
 
 MIT
