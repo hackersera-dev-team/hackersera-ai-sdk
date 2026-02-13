@@ -12,7 +12,10 @@ import (
 
 func main() {
 	// Using the deployed endpoint
-	baseURL := "http://hackersera-ai.cloudjiffy.net"
+	baseURL := os.Getenv("HACKERSERA_API_URL")
+	if baseURL == "" {
+		baseURL = "http://hackersera-ai.cloudjiffy.net"
+	}
 	apiKey := os.Getenv("HACKERSERA_API_KEY")
 	if apiKey == "" {
 		log.Fatal("❌ HACKERSERA_API_KEY environment variable is required")
