@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	sdk "github.com/hackersera-dev-team/hackersera-ai-sdk"
 )
@@ -38,13 +39,55 @@ func main() {
 	}
 	fmt.Println()
 
-	// ─── Chat Completion ─────────────────────────────────────────────────
-	fmt.Println("=== Chat Completion ===")
+	// ─── Upload Document (RAG) ───────────────────────────────────────────
+	fmt.Println("=== Upload Document ===")
+	doc, err := client.UploadDocument(ctx, sdk.DocumentUploadRequest{
+		Content:  "HackersEra is an Indian cybersecurity company founded in 2018. They specialize in AI-powered security solutions including penetration testing, red teaming, and vulnerability assessment.",
+		Filename: "about-hackersera.txt",
+		Tags:     map[string]string{"category": "company"},
+	})
+	if err != nil {
+		log.Fatalf("Upload document failed: %v", err)
+	}
+	fmt.Printf("Document ID: %s, Status: %s\n", doc.ID, doc.Status)
+
+	// Wait for indexing
+	fmt.Print("Waiting for indexing...")
+	for i := 0; i < 10; i++ {
+		time.Sleep(500 * time.Millisecond)
+		d, err := client.GetDocument(ctx, doc.ID)
+		if err == nil && d.Status == "indexed" {
+			fmt.Printf(" done (%d chunks)\n\n", d.ChunkCount)
+			break
+		}
+		if err == nil && d.Status == "failed" {
+			fmt.Printf(" failed: %s\n\n", d.Error)
+			break
+		}
+		fmt.Print(".")
+	}
+
+	// ─── Search Knowledge Base ───────────────────────────────────────────
+	fmt.Println("=== Search ===")
+	results, err := client.Search(ctx, sdk.SearchRequest{
+		Query: "cybersecurity company",
+	})
+	if err != nil {
+		log.Printf("Search failed: %v\n\n", err)
+	} else {
+		fmt.Printf("Found %d results for %q:\n", results.Total, results.Query)
+		for _, r := range results.Data {
+			fmt.Printf("  [%s] %s (score: %.2f)\n", r.Filename, r.Content[:80]+"...", r.Score)
+		}
+		fmt.Println()
+	}
+
+	// ─── Chat Completion (with RAG context) ──────────────────────────────
+	fmt.Println("=== Chat Completion (RAG-augmented) ===")
 	resp, err := client.ChatCompletion(ctx, sdk.ChatRequest{
 		Model: sdk.ModelDefault,
 		Messages: []sdk.Message{
-			{Role: "system", Content: "You are a helpful assistant. Be concise."},
-			{Role: "user", Content: "What is Go programming language?"},
+			{Role: "user", Content: "What is HackersEra?"},
 		},
 	})
 	if err != nil {
@@ -68,8 +111,8 @@ func main() {
 		select {
 		case chunk, ok := <-chunks:
 			if !ok {
-				fmt.Println()
-				return
+				fmt.Println("\n")
+				goto done
 			}
 			if len(chunk.Choices) > 0 {
 				fmt.Print(chunk.Choices[0].Delta.Content)
@@ -78,8 +121,27 @@ func main() {
 			if ok && err != nil {
 				log.Fatalf("\nStream error: %v", err)
 			}
-			fmt.Println()
-			return
+			fmt.Println("\n")
+			goto done
 		}
+	}
+
+done:
+	// ─── Usage Stats ─────────────────────────────────────────────────────
+	fmt.Println("=== Usage Stats ===")
+	usage, err := client.GetUsage(ctx)
+	if err != nil {
+		log.Printf("Usage failed: %v\n", err)
+	} else {
+		fmt.Printf("Total requests: %d, Total tokens: %d\n\n", usage.TotalRequests, usage.TotalTokens)
+	}
+
+	// ─── Cleanup: Delete Document ────────────────────────────────────────
+	fmt.Println("=== Cleanup ===")
+	del, err := client.DeleteDocument(ctx, doc.ID)
+	if err != nil {
+		log.Printf("Delete failed: %v\n", err)
+	} else {
+		fmt.Printf("Deleted document %s: %v\n", del.ID, del.Deleted)
 	}
 }

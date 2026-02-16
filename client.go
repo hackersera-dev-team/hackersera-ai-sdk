@@ -268,6 +268,297 @@ func (c *Client) Health(ctx context.Context) (*HealthResponse, error) {
 	return &health, nil
 }
 
+// ─── Documents (RAG) ────────────────────────────────────────────────────────
+
+// UploadDocument uploads a single document for RAG ingestion.
+// Returns immediately with status "processing" (202 Accepted); ingestion is async.
+// Poll with GetDocument() to check when indexing completes.
+func (c *Client) UploadDocument(ctx context.Context, req DocumentUploadRequest) (*DocumentResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/documents", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var docResp DocumentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&docResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &docResp, nil
+}
+
+// UploadDocuments uploads multiple documents for RAG ingestion in a single request.
+// Returns immediately with status "processing" (202 Accepted); ingestion is async.
+func (c *Client) UploadDocuments(ctx context.Context, docs []DocumentUploadRequest) (*DocumentListResponse, error) {
+	req := DocumentBatchUploadRequest{Documents: docs}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/documents", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var listResp DocumentListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &listResp, nil
+}
+
+// ListDocuments returns all documents in the knowledge base.
+func (c *Client) ListDocuments(ctx context.Context) (*DocumentListResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/documents", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var listResp DocumentListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &listResp, nil
+}
+
+// GetDocument returns a single document by ID.
+// Use this to poll document status after uploading.
+func (c *Client) GetDocument(ctx context.Context, docID string) (*DocumentResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/documents/"+docID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var docResp DocumentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&docResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &docResp, nil
+}
+
+// DeleteDocument soft-deletes a document and removes its chunks.
+func (c *Client) DeleteDocument(ctx context.Context, docID string) (*DocumentDeleteResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/v1/documents/"+docID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var delResp DocumentDeleteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&delResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &delResp, nil
+}
+
+// ─── Search (RAG) ───────────────────────────────────────────────────────────
+
+// Search performs a semantic search over the knowledge base.
+// Uses hybrid search (pgvector cosine + keyword RRF) for best results.
+func (c *Client) Search(ctx context.Context, req SearchRequest) (*SearchResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/search", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var searchResp SearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &searchResp, nil
+}
+
+// ─── Usage ──────────────────────────────────────────────────────────────────
+
+// GetUsage returns aggregated usage statistics.
+func (c *Client) GetUsage(ctx context.Context) (*UsageResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/usage", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var usageResp UsageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&usageResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &usageResp, nil
+}
+
+// GetRecentUsage returns recent usage records.
+func (c *Client) GetRecentUsage(ctx context.Context) (*UsageRecentResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/usage/recent", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var recentResp UsageRecentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&recentResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &recentResp, nil
+}
+
+// ─── Cache Stats ────────────────────────────────────────────────────────────
+
+// GetCacheStats returns response cache statistics.
+func (c *Client) GetCacheStats(ctx context.Context) (*CacheStatsResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/cache/stats", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var statsResp CacheStatsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&statsResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &statsResp, nil
+}
+
+// ─── Readiness ──────────────────────────────────────────────────────────────
+
+// Ready checks if the server is ready to accept requests (database + backend connected).
+func (c *Client) Ready(ctx context.Context) (*ReadyResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/ready", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusServiceUnavailable {
+		return nil, c.parseError(resp)
+	}
+
+	var readyResp ReadyResponse
+	if err := json.NewDecoder(resp.Body).Decode(&readyResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &readyResp, nil
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 func (c *Client) setHeaders(req *http.Request) {

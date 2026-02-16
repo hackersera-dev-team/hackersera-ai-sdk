@@ -141,6 +141,138 @@ type HealthResponse struct {
 	Version string `json:"version"`
 }
 
+// ─── Documents (RAG) ────────────────────────────────────────────────────────
+
+// DocumentUploadRequest represents a single document upload request.
+type DocumentUploadRequest struct {
+	Content  string            `json:"content"`
+	Filename string            `json:"filename,omitempty"`
+	Tags     map[string]string `json:"tags,omitempty"`
+}
+
+// DocumentBatchUploadRequest represents a batch document upload request.
+type DocumentBatchUploadRequest struct {
+	Documents []DocumentUploadRequest `json:"documents"`
+}
+
+// DocumentResponse represents a document returned by the API.
+type DocumentResponse struct {
+	ID         string            `json:"id"`
+	Filename   string            `json:"filename"`
+	Status     string            `json:"status"`
+	ChunkCount int               `json:"chunk_count"`
+	Tags       map[string]string `json:"tags,omitempty"`
+	CreatedAt  string            `json:"created_at"`
+	Error      string            `json:"error,omitempty"`
+}
+
+// DocumentListResponse represents the response from listing documents.
+type DocumentListResponse struct {
+	Object string             `json:"object"`
+	Data   []DocumentResponse `json:"data"`
+	Total  int                `json:"total"`
+}
+
+// DocumentDeleteResponse represents the response from deleting a document.
+type DocumentDeleteResponse struct {
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
+}
+
+// ─── Search (RAG) ───────────────────────────────────────────────────────────
+
+// SearchRequest represents a semantic search request.
+type SearchRequest struct {
+	Query     string            `json:"query"`
+	TopK      int               `json:"top_k,omitempty"`
+	Threshold float64           `json:"threshold,omitempty"`
+	Tags      map[string]string `json:"tags,omitempty"`
+}
+
+// SearchResult represents a single search result.
+type SearchResult struct {
+	ChunkID    string  `json:"chunk_id"`
+	DocumentID string  `json:"document_id"`
+	Filename   string  `json:"filename"`
+	Content    string  `json:"content"`
+	Score      float64 `json:"score"`
+	ChunkIndex int     `json:"chunk_index"`
+}
+
+// SearchResponse represents the response from a search request.
+type SearchResponse struct {
+	Object string         `json:"object"`
+	Data   []SearchResult `json:"data"`
+	Query  string         `json:"query"`
+	Total  int            `json:"total"`
+}
+
+// ─── Usage ──────────────────────────────────────────────────────────────────
+
+// UsageByModel represents usage statistics for a single model.
+type UsageByModel struct {
+	Model            string  `json:"model"`
+	Requests         int     `json:"requests"`
+	TotalTokens      int     `json:"total_tokens"`
+	PromptTokens     int     `json:"prompt_tokens"`
+	CompletionTokens int     `json:"completion_tokens"`
+	AvgLatencyMs     float64 `json:"avg_latency_ms"`
+}
+
+// UsageResponse represents the response from the usage endpoint.
+type UsageResponse struct {
+	TotalRequests    int            `json:"total_requests"`
+	TotalTokens      int            `json:"total_tokens"`
+	PromptTokens     int            `json:"prompt_tokens"`
+	CompletionTokens int            `json:"completion_tokens"`
+	AvgLatencyMs     float64        `json:"avg_latency_ms"`
+	ByModel          []UsageByModel `json:"by_model"`
+}
+
+// UsageRecord represents a single usage record.
+type UsageRecord struct {
+	ID               int    `json:"id"`
+	RequestID        string `json:"request_id"`
+	Model            string `json:"model"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
+	TotalTokens      int    `json:"total_tokens"`
+	LatencyMs        int64  `json:"latency_ms"`
+	StatusCode       int    `json:"status_code"`
+	Streaming        bool   `json:"streaming"`
+	CreatedAt        string `json:"created_at"`
+}
+
+// UsageRecentResponse represents the response from the recent usage endpoint.
+type UsageRecentResponse struct {
+	Object string        `json:"object"`
+	Count  int           `json:"count"`
+	Data   []UsageRecord `json:"data"`
+}
+
+// ─── Cache Stats ────────────────────────────────────────────────────────────
+
+// CacheStatsResponse represents the response from the cache stats endpoint.
+type CacheStatsResponse struct {
+	TotalEntries   int64   `json:"total_entries"`
+	TotalHits      int64   `json:"total_hits"`
+	ActiveEntries  int64   `json:"active_entries"`
+	ExpiredEntries int64   `json:"expired_entries"`
+	TokensSaved    int64   `json:"tokens_saved"`
+	AvgHitCount    float64 `json:"avg_hit_count"`
+	OldestEntry    string  `json:"oldest_entry,omitempty"`
+	NewestEntry    string  `json:"newest_entry,omitempty"`
+}
+
+// ─── Readiness ──────────────────────────────────────────────────────────────
+
+// ReadyResponse represents the response from the readiness endpoint.
+type ReadyResponse struct {
+	Ready   bool              `json:"ready"`
+	Version string            `json:"version"`
+	Checks  map[string]string `json:"checks"`
+}
+
 // ─── Errors ─────────────────────────────────────────────────────────────────
 
 // APIError represents an error returned by the API.

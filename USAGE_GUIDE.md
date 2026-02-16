@@ -10,10 +10,15 @@
 6. [Streaming Responses](#streaming-responses)
 7. [Model Management](#model-management)
 8. [Embeddings](#embeddings)
-9. [Error Handling](#error-handling)
-10. [Advanced Usage](#advanced-usage)
-11. [Best Practices](#best-practices)
-12. [Examples](#examples)
+9. [Documents (RAG Knowledge Base)](#documents-rag-knowledge-base)
+10. [Search](#search)
+11. [Usage Statistics](#usage-statistics)
+12. [Cache Statistics](#cache-statistics)
+13. [Health & Readiness](#health--readiness)
+14. [Error Handling](#error-handling)
+15. [Advanced Usage](#advanced-usage)
+16. [Best Practices](#best-practices)
+17. [Examples](#examples)
 
 ---
 
@@ -483,6 +488,327 @@ similarity := cosineSimilarity(
 )
 
 fmt.Printf("Similarity: %.4f\n", similarity)
+```
+
+---
+
+## Documents (RAG Knowledge Base)
+
+The HackersEra AI platform includes a built-in RAG (Retrieval-Augmented Generation) pipeline. Upload documents to build a knowledge base, and all chat completions are automatically augmented with relevant context from your documents.
+
+### Upload a Single Document
+
+Document ingestion is asynchronous — the upload returns immediately with status `"processing"` while chunking and embedding happen in the background.
+
+```go
+doc, err := client.UploadDocument(ctx, sdk.DocumentUploadRequest{
+    Content:  "Your document text content here...",
+    Filename: "knowledge-base.txt",
+    Tags:     map[string]string{"category": "docs", "topic": "go"},
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Document %s uploaded (status: %s)\n", doc.ID, doc.Status)
+```
+
+### Upload Multiple Documents (Batch)
+
+```go
+batch, err := client.UploadDocuments(ctx, []sdk.DocumentUploadRequest{
+    {Content: "First document content...", Filename: "doc1.md"},
+    {Content: "Second document content...", Filename: "doc2.md", Tags: map[string]string{"team": "engineering"}},
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Uploaded %d documents\n", batch.Total)
+for _, d := range batch.Data {
+    fmt.Printf("  %s: %s\n", d.ID, d.Status)
+}
+```
+
+### Poll Document Status
+
+After uploading, poll until the document is indexed (chunked and embedded):
+
+```go
+doc, _ := client.UploadDocument(ctx, sdk.DocumentUploadRequest{
+    Content:  "Important knowledge...",
+    Filename: "info.txt",
+})
+
+// Poll until indexed or failed
+for {
+    d, err := client.GetDocument(ctx, doc.ID)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    switch d.Status {
+    case "indexed":
+        fmt.Printf("Ready! %d chunks created\n", d.ChunkCount)
+        goto done
+    case "failed":
+        fmt.Printf("Ingestion failed: %s\n", d.Error)
+        goto done
+    default:
+        fmt.Print(".")
+        time.Sleep(500 * time.Millisecond)
+    }
+}
+done:
+```
+
+### List All Documents
+
+```go
+docs, err := client.ListDocuments(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Total documents: %d\n", docs.Total)
+for _, d := range docs.Data {
+    fmt.Printf("  %s — %s (%d chunks, status: %s)\n",
+        d.ID, d.Filename, d.ChunkCount, d.Status)
+}
+```
+
+### Get a Single Document
+
+```go
+doc, err := client.GetDocument(ctx, "doc-123456")
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Filename: %s\n", doc.Filename)
+fmt.Printf("Status: %s\n", doc.Status)
+fmt.Printf("Chunks: %d\n", doc.ChunkCount)
+fmt.Printf("Tags: %v\n", doc.Tags)
+fmt.Printf("Created: %s\n", doc.CreatedAt)
+```
+
+### Delete a Document
+
+Soft-deletes the document and hard-deletes all its chunks from the vector store:
+
+```go
+del, err := client.DeleteDocument(ctx, "doc-123456")
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Deleted %s: %v\n", del.ID, del.Deleted)
+```
+
+### RAG-Augmented Chat
+
+Once documents are indexed, chat completions are automatically augmented with relevant context. No extra code needed — just use `ChatCompletion` as usual:
+
+```go
+// Upload knowledge
+client.UploadDocument(ctx, sdk.DocumentUploadRequest{
+    Content:  "HackersEra was founded in 2018 and specializes in AI-powered cybersecurity.",
+    Filename: "about.txt",
+})
+time.Sleep(2 * time.Second) // wait for indexing
+
+// Chat — RAG context is injected transparently
+resp, err := client.ChatCompletion(ctx, sdk.ChatRequest{
+    Model:    sdk.ModelDefault,
+    Messages: []sdk.Message{{Role: "user", Content: "When was HackersEra founded?"}},
+})
+
+// Response will use knowledge base context
+fmt.Println(resp.Choices[0].Message.Content)
+// "HackersEra was founded in 2018..."
+```
+
+---
+
+## Search
+
+Search the knowledge base using hybrid search (pgvector cosine similarity + keyword matching with Reciprocal Rank Fusion).
+
+### Basic Search
+
+```go
+results, err := client.Search(ctx, sdk.SearchRequest{
+    Query: "cybersecurity vulnerabilities",
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Found %d results for %q:\n", results.Total, results.Query)
+for _, r := range results.Data {
+    fmt.Printf("  [%s] %s (score: %.2f)\n", r.Filename, r.Content, r.Score)
+}
+```
+
+### Search with Filters
+
+```go
+results, err := client.Search(ctx, sdk.SearchRequest{
+    Query:     "penetration testing methodology",
+    TopK:      10,                                          // return top 10 results
+    Threshold: 0.5,                                         // minimum similarity score
+    Tags:      map[string]string{"category": "security"},   // filter by document tags
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, r := range results.Data {
+    fmt.Printf("[%s] chunk %d (doc: %s, score: %.2f)\n",
+        r.Filename, r.ChunkIndex, r.DocumentID, r.Score)
+    fmt.Printf("  %s\n\n", r.Content)
+}
+```
+
+### Search Result Fields
+
+Each `SearchResult` contains:
+
+```go
+type SearchResult struct {
+    ChunkID    string  // unique chunk identifier
+    DocumentID string  // parent document ID
+    Filename   string  // original filename
+    Content    string  // chunk text content
+    Score      float64 // similarity score (0.0-1.0)
+    ChunkIndex int     // position within the document
+}
+```
+
+---
+
+## Usage Statistics
+
+### Aggregated Usage
+
+```go
+usage, err := client.GetUsage(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Total requests: %d\n", usage.TotalRequests)
+fmt.Printf("Total tokens: %d\n", usage.TotalTokens)
+fmt.Printf("  Prompt tokens: %d\n", usage.PromptTokens)
+fmt.Printf("  Completion tokens: %d\n", usage.CompletionTokens)
+fmt.Printf("Avg latency: %.1f ms\n", usage.AvgLatencyMs)
+
+fmt.Println("\nUsage by model:")
+for _, m := range usage.ByModel {
+    fmt.Printf("  %s: %d requests, %d tokens, %.1f ms avg\n",
+        m.Model, m.Requests, m.TotalTokens, m.AvgLatencyMs)
+}
+```
+
+### Recent Usage Records
+
+```go
+recent, err := client.GetRecentUsage(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Recent requests (%d):\n", recent.Count)
+for _, r := range recent.Data {
+    fmt.Printf("  %s — %s model, %d tokens, %d ms, status %d\n",
+        r.CreatedAt, r.Model, r.TotalTokens, r.LatencyMs, r.StatusCode)
+}
+```
+
+---
+
+## Cache Statistics
+
+The server caches responses using semantic similarity matching. Check cache performance:
+
+```go
+stats, err := client.GetCacheStats(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Cache entries: %d active, %d expired, %d total\n",
+    stats.ActiveEntries, stats.ExpiredEntries, stats.TotalEntries)
+fmt.Printf("Cache hits: %d (avg %.1f hits per entry)\n",
+    stats.TotalHits, stats.AvgHitCount)
+fmt.Printf("Tokens saved by cache: %d\n", stats.TokensSaved)
+
+if stats.OldestEntry != "" {
+    fmt.Printf("Oldest entry: %s\n", stats.OldestEntry)
+    fmt.Printf("Newest entry: %s\n", stats.NewestEntry)
+}
+```
+
+---
+
+## Health & Readiness
+
+### Health Check
+
+Lightweight check — no auth required, no dependency probing:
+
+```go
+health, err := client.Health(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Status: %s, Version: %s\n", health.Status, health.Version)
+```
+
+### Readiness Probe
+
+Deep check — verifies database and backend connectivity:
+
+```go
+ready, err := client.Ready(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Ready: %v (version: %s)\n", ready.Ready, ready.Version)
+for component, status := range ready.Checks {
+    fmt.Printf("  %s: %s\n", component, status)
+}
+```
+
+### Health Monitoring Loop
+
+```go
+func monitorHealth(client *sdk.Client, interval time.Duration) {
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+
+    for range ticker.C {
+        ready, err := client.Ready(context.Background())
+        if err != nil {
+            log.Printf("Readiness check failed: %v\n", err)
+            continue
+        }
+
+        if !ready.Ready {
+            log.Printf("WARNING: Server not ready")
+            for k, v := range ready.Checks {
+                log.Printf("  %s: %s", k, v)
+            }
+        } else {
+            log.Printf("Server ready (version: %s)\n", ready.Version)
+        }
+    }
+}
+
+// Run in background
+go monitorHealth(client, 1*time.Minute)
 ```
 
 ---

@@ -1,6 +1,6 @@
 # HackersEra AI SDK
 
-Go SDK for the [HackersEra AI](https://hub.docker.com/r/hackerseravsoc/hackersera-ai-model-provider) API.
+Go SDK for the [HackersEra AI](https://hub.docker.com/r/hackerseravsoc/hackersera-ai-model-provider) API — a RAG-powered AI-as-a-Service platform.
 
 ## Install
 
@@ -60,6 +60,8 @@ client = sdk.NewClient(baseURL, apiKey).WithHTTPClient(&http.Client{
 
 ### Chat Completion
 
+Chat requests are transparently augmented with relevant context from the RAG knowledge base.
+
 ```go
 resp, err := client.ChatCompletion(ctx, sdk.ChatRequest{
     Model: sdk.ModelDefault,
@@ -111,6 +113,61 @@ for {
 }
 ```
 
+### Documents (RAG Knowledge Base)
+
+Upload documents to build the knowledge base. Ingestion is asynchronous — the upload returns immediately while chunking and embedding happen in the background.
+
+```go
+// Upload a single document
+doc, err := client.UploadDocument(ctx, sdk.DocumentUploadRequest{
+    Content:  "Your document text here...",
+    Filename: "knowledge.txt",
+    Tags:     map[string]string{"category": "docs", "topic": "go"},
+})
+fmt.Printf("Document %s status: %s\n", doc.ID, doc.Status) // "processing"
+
+// Poll until indexed
+for {
+    d, _ := client.GetDocument(ctx, doc.ID)
+    if d.Status == "indexed" || d.Status == "failed" {
+        break
+    }
+    time.Sleep(500 * time.Millisecond)
+}
+
+// Batch upload
+batch, err := client.UploadDocuments(ctx, []sdk.DocumentUploadRequest{
+    {Content: "First doc...", Filename: "doc1.md"},
+    {Content: "Second doc...", Filename: "doc2.md"},
+})
+
+// List all documents
+docs, err := client.ListDocuments(ctx)
+for _, d := range docs.Data {
+    fmt.Printf("%s: %s (%d chunks)\n", d.ID, d.Status, d.ChunkCount)
+}
+
+// Delete a document
+del, err := client.DeleteDocument(ctx, docID)
+fmt.Printf("Deleted: %v\n", del.Deleted)
+```
+
+### Search
+
+Search the knowledge base using hybrid search (semantic + keyword).
+
+```go
+results, err := client.Search(ctx, sdk.SearchRequest{
+    Query: "cybersecurity vulnerabilities",
+    TopK:  5,
+    Tags:  map[string]string{"category": "security"},
+})
+
+for _, r := range results.Data {
+    fmt.Printf("[%s] %s (score: %.2f)\n", r.Filename, r.Content, r.Score)
+}
+```
+
 ### List Models
 
 ```go
@@ -135,11 +192,38 @@ emb, err := client.CreateEmbedding(ctx, sdk.EmbeddingRequest{
 })
 ```
 
-### Health Check
+### Usage Statistics
 
 ```go
+// Aggregated usage
+usage, err := client.GetUsage(ctx)
+fmt.Printf("Requests: %d, Tokens: %d\n", usage.TotalRequests, usage.TotalTokens)
+
+// Recent records
+recent, err := client.GetRecentUsage(ctx)
+for _, r := range recent.Data {
+    fmt.Printf("%s: %s model, %d tokens\n", r.CreatedAt, r.Model, r.TotalTokens)
+}
+```
+
+### Cache Statistics
+
+```go
+stats, err := client.GetCacheStats(ctx)
+fmt.Printf("Entries: %d, Hits: %d, Tokens saved: %d\n",
+    stats.ActiveEntries, stats.TotalHits, stats.TokensSaved)
+```
+
+### Health & Readiness
+
+```go
+// Health check (no auth required)
 health, err := client.Health(ctx)
 fmt.Printf("Status: %s, Version: %s\n", health.Status, health.Version)
+
+// Readiness probe (checks database + backend)
+ready, err := client.Ready(ctx)
+fmt.Printf("Ready: %v, DB: %s\n", ready.Ready, ready.Checks["database"])
 ```
 
 ### Error Handling
@@ -243,7 +327,7 @@ curl http://hackersera-ai.cloudjiffy.net/v1/chat/completions \
 
 ## Testing the Deployment
 
-A test script is provided to verify the API deployment:
+A test script is provided to verify all API endpoints:
 
 ```bash
 # Set your API key
@@ -255,11 +339,14 @@ go run test_deployment.go
 ```
 
 The test will verify:
-- Health endpoint
+- Health and readiness endpoints
 - Model listing and retrieval
 - Chat completions (non-streaming)
 - Streaming responses
 - Embeddings
+- Document upload, status polling, listing, and deletion (RAG)
+- Semantic search
+- Usage and cache statistics
 
 ## License
 
