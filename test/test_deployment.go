@@ -14,7 +14,7 @@ func main() {
 	// Using the deployed endpoint
 	baseURL := os.Getenv("HACKERSERA_API_URL")
 	if baseURL == "" {
-		baseURL = "http://hackersera-ai.cloudjiffy.net"
+		baseURL = "https://api-ai.hackersera.com"
 	}
 	apiKey := os.Getenv("HACKERSERA_API_KEY")
 	if apiKey == "" {
@@ -73,27 +73,33 @@ func main() {
 		fmt.Printf("   OK Model: %s\n\n", model.ID)
 	}
 
-	// Test 5: Chat Completion
-	fmt.Println("5. Testing Chat Completion...")
+	// Test 5: Chat Completion (with user identity)
+	fmt.Println("5. Testing Chat Completion (with user identity)...")
 	startTime := time.Now()
-	resp, err := client.ChatCompletion(ctx, sdk.ChatRequest{
+	resp, err := client.ChatCompletionWithOptions(ctx, sdk.ChatRequest{
 		Model: sdk.ModelDefault,
 		Messages: []sdk.Message{
 			{Role: "user", Content: "Say 'Hello from HackersEra AI!' and nothing else."},
 		},
+		User: "test-user",
+	}, sdk.RequestOptions{
+		UserID: "test-user",
 	})
 	duration := time.Since(startTime)
 
+	var conversationID string
 	if err != nil {
 		log.Printf("   FAIL Chat completion: %v\n", err)
 	} else {
 		fmt.Printf("   OK Response received in %v:\n", duration)
 		fmt.Printf("      Content: %s\n", resp.Choices[0].Message.Content)
 		fmt.Printf("      Model: %s\n", resp.Model)
+		fmt.Printf("      Conversation ID: %s\n", resp.ConversationID)
 		fmt.Printf("      Tokens - Prompt: %d, Completion: %d, Total: %d\n\n",
 			resp.Usage.PromptTokens,
 			resp.Usage.CompletionTokens,
 			resp.Usage.TotalTokens)
+		conversationID = resp.ConversationID
 	}
 
 	// Test 6: Streaming
@@ -199,8 +205,170 @@ streamDone:
 		fmt.Println()
 	}
 
-	// Test 11: Usage Stats
-	fmt.Println("11. Testing Usage Stats...")
+	// Test 11: Submit Feedback
+	fmt.Println("11. Testing Feedback...")
+	if conversationID != "" {
+		fb, err := client.SubmitFeedback(ctx, sdk.FeedbackRequest{
+			ConversationID: conversationID,
+			Rating:         1,
+			Comment:        "Deployment test feedback",
+		})
+		if err != nil {
+			log.Printf("   FAIL Feedback: %v\n", err)
+		} else {
+			fmt.Printf("   OK Feedback ID: %d, Rating: %d\n\n", fb.ID, fb.Rating)
+		}
+	} else {
+		fmt.Println("   SKIP No conversation ID available\n")
+	}
+
+	// Test 12: List Conversations
+	fmt.Println("12. Testing List Conversations...")
+	convos, err := client.ListConversations(ctx, 5)
+	if err != nil {
+		log.Printf("   FAIL List conversations: %v\n", err)
+	} else {
+		fmt.Printf("   OK Found %d conversations\n", convos.Total)
+		for _, conv := range convos.Data {
+			fmt.Printf("      [%s] %s (%d turns)\n", conv.ID, conv.Title, conv.TurnCount)
+		}
+		fmt.Println()
+	}
+
+	// Test 13: Get Conversation Detail
+	fmt.Println("13. Testing Get Conversation...")
+	if conversationID != "" {
+		detail, err := client.GetConversation(ctx, conversationID)
+		if err != nil {
+			log.Printf("   FAIL Get conversation: %v\n", err)
+		} else {
+			fmt.Printf("   OK Conversation: %s, Turns: %d\n", detail.Title, detail.TurnCount)
+			for _, turn := range detail.Turns {
+				preview := turn.Content
+				if len(preview) > 60 {
+					preview = preview[:60] + "..."
+				}
+				fmt.Printf("      [%s] %s\n", turn.Role, preview)
+			}
+			fmt.Println()
+		}
+	} else {
+		fmt.Println("   SKIP No conversation ID available\n")
+	}
+
+	// Test 14: Search Conversations
+	fmt.Println("14. Testing Search Conversations...")
+	convSearch, err := client.SearchConversations(ctx, "Hello", 5)
+	if err != nil {
+		log.Printf("   FAIL Search conversations: %v\n", err)
+	} else {
+		fmt.Printf("   OK Found %d results for %q\n\n", convSearch.Total, convSearch.Query)
+	}
+
+	// Test 15: User Profile — Get
+	fmt.Println("15. Testing Get Profile...")
+	profile, err := client.GetProfile(ctx, "test-user")
+	if err != nil {
+		log.Printf("   FAIL Get profile: %v\n", err)
+	} else {
+		fmt.Printf("   OK User: %s, Queries: %d\n\n", profile.UserID, profile.TotalQueries)
+	}
+
+	// Test 16: User Profile — Update
+	fmt.Println("16. Testing Update Profile...")
+	updatedProfile, err := client.UpdateProfile(ctx, "test-user", sdk.ProfileUpdateRequest{
+		DisplayName: "Test User",
+		Preferences: map[string]string{"language": "go", "detail_level": "concise"},
+	})
+	if err != nil {
+		log.Printf("   FAIL Update profile: %v\n", err)
+	} else {
+		fmt.Printf("   OK Updated: %s (display: %s)\n\n", updatedProfile.UserID, updatedProfile.DisplayName)
+	}
+
+	// Test 17: Create Fact
+	fmt.Println("17. Testing Create Fact...")
+	fact, err := client.CreateFact(ctx, sdk.FactCreateRequest{
+		Content:    "HackersEra SDK supports Go, Python, and Node.js",
+		Source:     "manual",
+		Confidence: 0.9,
+		Verified:   true,
+	})
+	if err != nil {
+		log.Printf("   FAIL Create fact: %v\n", err)
+	} else {
+		fmt.Printf("   OK Fact ID: %d, Confidence: %.2f\n\n", fact.ID, fact.Confidence)
+	}
+
+	// Test 18: Batch Create Facts
+	fmt.Println("18. Testing Batch Create Facts...")
+	batchFacts, err := client.CreateFacts(ctx, []sdk.FactCreateRequest{
+		{Content: "Go SDK uses zero external dependencies", Source: "docs", Confidence: 0.95},
+		{Content: "API is OpenAI-compatible", Source: "docs", Confidence: 0.99, Verified: true},
+	})
+	if err != nil {
+		log.Printf("   FAIL Batch create facts: %v\n", err)
+	} else {
+		fmt.Printf("   OK Created %d facts\n\n", batchFacts.Total)
+	}
+
+	// Test 19: List Facts
+	fmt.Println("19. Testing List Facts...")
+	facts, err := client.ListFacts(ctx, 10, nil)
+	if err != nil {
+		log.Printf("   FAIL List facts: %v\n", err)
+	} else {
+		fmt.Printf("   OK Found %d facts\n", facts.Total)
+		for _, f := range facts.Data {
+			preview := f.Content
+			if len(preview) > 50 {
+				preview = preview[:50] + "..."
+			}
+			fmt.Printf("      [%d] %s (conf: %.2f)\n", f.ID, preview, f.Confidence)
+		}
+		fmt.Println()
+	}
+
+	// Test 20: Update Fact
+	if fact != nil {
+		fmt.Println("20. Testing Update Fact...")
+		updated, err := client.UpdateFact(ctx, fact.ID, sdk.FactUpdateRequest{
+			Verified:   sdk.BoolPtr(true),
+			Confidence: sdk.Float64Ptr(0.99),
+		})
+		if err != nil {
+			log.Printf("   FAIL Update fact: %v\n", err)
+		} else {
+			fmt.Printf("   OK Updated fact %d: confidence=%.2f, verified=%v\n\n", updated.ID, updated.Confidence, updated.Verified)
+		}
+	}
+
+	// Test 21: Knowledge Graph
+	fmt.Println("21. Testing Knowledge Graph...")
+	graph, err := client.QueryKnowledgeGraph(ctx, "cybersecurity", 10)
+	if err != nil {
+		log.Printf("   FAIL Knowledge graph: %v\n", err)
+	} else {
+		fmt.Printf("   OK Found %d nodes, %d edges for %q\n", graph.Total, len(graph.Edges), graph.Query)
+		for _, node := range graph.Data {
+			fmt.Printf("      [%s] %s (hits: %d)\n", node.ID, node.Label, node.HitCount)
+		}
+		fmt.Println()
+	}
+
+	// Test 22: Cognitive Stats
+	fmt.Println("22. Testing Cognitive Stats...")
+	cogStats, err := client.GetCognitiveStats(ctx)
+	if err != nil {
+		log.Printf("   FAIL Cognitive stats: %v\n", err)
+	} else {
+		fmt.Printf("   OK Conversations: %d, Turns: %d, Facts: %d\n", cogStats.TotalConversations, cogStats.TotalTurns, cogStats.TotalLearnedFacts)
+		fmt.Printf("      Graph: %d nodes, %d edges\n", cogStats.TotalKnowledgeNodes, cogStats.TotalKnowledgeEdges)
+		fmt.Printf("      Feedback: %d (+%d / -%d)\n\n", cogStats.TotalFeedback, cogStats.PositiveFeedback, cogStats.NegativeFeedback)
+	}
+
+	// Test 23: Usage Stats
+	fmt.Println("23. Testing Usage Stats...")
 	usage, err := client.GetUsage(ctx)
 	if err != nil {
 		log.Printf("   FAIL Usage: %v\n", err)
@@ -208,8 +376,17 @@ streamDone:
 		fmt.Printf("   OK Total requests: %d, Total tokens: %d\n\n", usage.TotalRequests, usage.TotalTokens)
 	}
 
-	// Test 12: Cache Stats
-	fmt.Println("12. Testing Cache Stats...")
+	// Test 24: Recent Usage
+	fmt.Println("24. Testing Recent Usage...")
+	recent, err := client.GetRecentUsage(ctx)
+	if err != nil {
+		log.Printf("   FAIL Recent usage: %v\n", err)
+	} else {
+		fmt.Printf("   OK Found %d recent records\n\n", recent.Count)
+	}
+
+	// Test 25: Cache Stats
+	fmt.Println("25. Testing Cache Stats...")
 	cacheStats, err := client.GetCacheStats(ctx)
 	if err != nil {
 		log.Printf("   FAIL Cache stats: %v\n", err)
@@ -218,14 +395,38 @@ streamDone:
 			cacheStats.ActiveEntries, cacheStats.TotalHits, cacheStats.TokensSaved)
 	}
 
-	// Test 13: Cleanup — delete test document
+	// Test 26: Metrics
+	fmt.Println("26. Testing Metrics...")
+	metrics, err := client.GetMetrics(ctx)
+	if err != nil {
+		log.Printf("   FAIL Metrics: %v\n", err)
+	} else {
+		preview := metrics
+		if len(preview) > 200 {
+			preview = preview[:200] + "..."
+		}
+		fmt.Printf("   OK Metrics received (%d bytes):\n      %s\n\n", len(metrics), preview)
+	}
+
+	// Test 27: Cleanup — delete test document
 	if doc != nil {
-		fmt.Println("13. Testing Document Delete...")
+		fmt.Println("27. Testing Document Delete...")
 		del, err := client.DeleteDocument(ctx, doc.ID)
 		if err != nil {
 			log.Printf("   FAIL Delete: %v\n", err)
 		} else {
 			fmt.Printf("   OK Deleted: %s = %v\n\n", del.ID, del.Deleted)
+		}
+	}
+
+	// Test 28: Cleanup — delete test conversation
+	if conversationID != "" {
+		fmt.Println("28. Testing Conversation Delete...")
+		delConv, err := client.DeleteConversation(ctx, conversationID)
+		if err != nil {
+			log.Printf("   FAIL Delete conversation: %v\n", err)
+		} else {
+			fmt.Printf("   OK Deleted: %s = %v\n\n", delConv.ID, delConv.Deleted)
 		}
 	}
 
